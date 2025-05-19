@@ -1,58 +1,47 @@
-# researchAI
-This project helps researchers and students quickly identify unexplored areas in scientific literature and brainstorm new research directions. It fetches recent papers from both arXiv and CORE, analyzes them using Google’s Gemini API, and presents actionable insights through an interactive Gradio web interface.
-How It Works
+# Research Website
 
-This tool streamlines the process of discovering research gaps and generating new research ideas by combining open-access literature with advanced AI analysis-all in an easy-to-use web app.
+This project is a simple research website that allows users to enter a search topic, view top research papers, and identify research gaps. The website is structured into three main sections for easy navigation and interaction.
 
-Multi-Source Paper Retrieval
-When you enter a research topic, the app automatically searches for relevant and recent papers from both arXiv and CORE, two of the world’s largest open-access research repositories. This ensures broad and up-to-date coverage across disciplines.
+## Project Structure
 
-AI-Powered Content Analysis
-Instead of just extracting limitations sections, the tool uses Google’s Gemini AI to read and synthesize the main ideas from multiple papers on the same topic. The AI reviews abstracts and summaries to understand current trends, methodologies, and findings.
+```
+research-website
+├── src
+│   ├── index.html        # Main HTML document for the website
+│   ├── styles
+│   │   └── main.css      # CSS styles for the website
+│   └── scripts
+│       └── main.js       # JavaScript code for website functionality
+└── README.md             # Documentation for the project
+```
 
-Identification of Research Gaps
-Gemini analyzes the collective body of literature to spot areas that are underexplored, disconnected, or missing entirely-these are potential research gaps. The process is similar to how modern AI tools like Insight7 and VOSviewer map and compare large volumes of research to highlight what’s new, what’s missing, and where contradictions or open questions remain.
+## Getting Started
 
-Idea Generation
-Based on the identified gaps, the AI creatively proposes new research questions or project ideas, helping you move from “what’s missing” to “what’s next.”
+To set up and run the website locally, follow these steps:
 
-Interactive Results Display
-All findings are presented in a clear, readable format using a Gradio web interface. You get synthesized research gaps and actionable new ideas in seconds, ready to inspire your next project or guide your literature review.
-Stuff used:-
-1. Large Language Models (LLMs)
-Google Gemini API:
-Provides state-of-the-art text understanding and generation, allowing the system to read, synthesize, and analyze multiple research papers to find gaps and propose new ideas.
-(Comparable alternatives: OpenAI GPT-4, Anthropic Claude, Cohere Command, Hugging Face models).
+1. **Clone the repository:**
+   ```
+   git clone <repository-url>
+   ```
 
-2. Research Paper Aggregators and APIs
-arXiv API:
-Fetches recent and relevant open-access research papers in various fields.
+2. **Navigate to the project directory:**
+   ```
+   cd research-website
+   ```
 
-CORE API:
-Aggregates millions of open-access papers from repositories and journals worldwide, expanding coverage and diversity of sources.
+3. **Open the `index.html` file in your web browser:**
+   You can simply double-click the `index.html` file or open it using your preferred web browser.
 
-3. Data Extraction and Summarization
-Natural Language Processing (NLP):
-Used to extract abstracts, summaries, and key information from papers, regardless of format.
-Tools like Elicit, Consensus, and R Discovery automate data extraction and summarization for large-scale literature reviews.
+## Features
 
-4. Research Gap Identification Tools
-AI-powered analysis:
-Models like Gemini (or Insight7, Iris.ai, VOSviewer, Connected Papers) compare, cluster, and synthesize information from multiple papers to identify underexplored areas, trends, and gaps.
+- **Enter Your Search Topic:** A section where users can input their research topic.
+- **Top Research Papers:** Displays a list of top research papers related to the entered topic.
+- **Research Gaps:** Highlights potential gaps in the current research landscape.
 
-Visualization:
-Tools such as VOSviewer and Connected Papers can visualize citation networks and topic clusters to highlight where research is dense or sparse.
+## Contributing
 
-5. User Interface
-Gradio:
-Provides a simple, interactive web interface for users to enter topics and view results without coding.
+If you would like to contribute to this project, please fork the repository and submit a pull request with your changes.
 
-6. Supporting Libraries
-Requests:
-For making HTTP requests to APIs.
+## License
 
-PyMuPDF:
-For extracting text from PDF files (if needed).
-
-tqdm:
-For progress bars during batch processing.
+This project is licensed under the MIT License. See the LICENSE file for more details.

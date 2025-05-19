@@ -1,0 +1,7 @@
+arxiv
+requests
+sentence-transformers
+gradio
+google-generativeai
+Pillow
+openai
