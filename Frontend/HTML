@@ -1,1 +1,792 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Topic Explorer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #18120a;
+            --panel: #2a2116;
+            --text: #ffe6b3;
+            --border: #bfa76a;
+            --header: #e6b86a;
+            --sub: #ffe6b3;
+            --btn-bg: #2a2116;
+            --btn-text: #ffe6b3;
+            --btn-hover: #bfa76a;
+        }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            transition: background 0.3s, color 0.3s;
+        }
+        header {
+            text-align: center;
+            padding: 2rem 0 1rem 0;
+            position: relative;
+        }
+        .header-title {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--header);
+            margin-bottom: 0.3rem;
+        }
+        .header-sub {
+            font-size: 1rem;
+            color: var(--sub);
+            opacity: 0.8;
+        }
+        .info-tooltip {
+            display: inline-block;
+            margin-left: 0.5rem;
+            position: relative;
+            cursor: pointer;
+        }
+        .info-tooltip .tooltip-text {
+            visibility: hidden;
+            width: 260px;
+            background: var(--panel);
+            color: var(--text);
+            text-align: left;
+            border-radius: 0.5rem;
+            padding: 0.7rem 1rem;
+            position: absolute;
+            z-index: 10;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            font-size: 0.95rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 8px #0002;
+            transition: opacity 0.2s;
+        }
+        .info-tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 2rem;
+            width: 100vw;
+        }
+        .quick-links {
+            margin: 0.5rem 0 1.5rem 0;
+            display: flex;
+            gap: 1.2rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .quick-links a {
+            color: var(--header);
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 0.3rem 0.9rem;
+            text-decoration: none;
+            font-size: 0.98rem;
+            transition: background 0.2s, color 0.2s;
+        }
+        .quick-links a:hover {
+            background: var(--btn-hover);
+            color: var(--btn-text);
+        }
+        .resize-flex {
+            display: flex;
+            gap: 2rem;
+            width: 100%;
+            max-width: 1100px;
+            justify-content: center;
+            align-items: stretch;
+            min-height: 400px;
+        }
+        .iframe-section {
+            flex: 2;
+            min-width: 320px;
+            max-width: 700px;
+            display: flex;
+            flex-direction: column;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 0.7rem 0 0 0.7rem;
+            padding: 1rem 1rem 1rem 1rem;
+            transition: background 0.3s, border 0.3s;
+            position: relative;
+        }
+        .panel-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--header);
+            margin-bottom: 0.7rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .fullscreen-icon-btn {
+            background: none;
+            border: none;
+            padding: 0.2rem 0.4rem;
+            cursor: pointer;
+            border-radius: 0.4rem;
+            transition: background 0.15s;
+        }
+        .fullscreen-icon-btn:hover {
+            background: var(--btn-hover);
+        }
+        iframe {
+            width: 100%;
+            height: 60vh;
+            min-height: 300px;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            background: #fff;
+            background: var(--panel);
+            transition: background 0.3s, border 0.3s;
+        }
+        .fullscreen-iframe {
+            position: fixed !important;
+            top: 0;
+            left: 0;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            max-height: none !important;
+            border-radius: 0 !important;
+            z-index: 100;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: var(--panel) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        .fullscreen-iframe iframe {
+            border-radius: 0 !important;
+            height: calc(100vh - 2rem) !important;
+            width: calc(100vw - 2rem) !important;
+            max-height: none !important;
+            max-width: none !important;
+        }
+        .resizer {
+            width: 8px;
+            cursor: ew-resize;
+            background: var(--border);
+            opacity: 0.3;
+            border-radius: 4px;
+            margin: 0 0.2rem;
+            transition: background 0.2s;
+        }
+        .resizer:hover {
+            background: var(--header);
+            opacity: 0.7;
+        }
+        .notepad-section {
+            flex: 1;
+            min-width: 220px;
+            max-width: 320px;
+            display: flex;
+            flex-direction: column;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 0 0.7rem 0.7rem 0;
+            padding: 1rem 1rem 1rem 1rem;
+            transition: background 0.3s, border 0.3s;
+            /* Ensures the notepad fills the section */
+        }
+        .notepad-header {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--header);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: space-between;
+        }
+        .notepad-actions {
+            display: flex;
+            gap: 0.3rem;
+        }
+        #notepad {
+            width: 100%;
+            flex: 1;
+            font-size: 1rem;
+            font-family: 'Inter', Arial, sans-serif;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 0.7rem 0.8rem;
+            background: var(--bg);
+            color: var(--text);
+            resize: vertical;
+            min-height: 180px;
+            max-height: 400px;
+            transition: background 0.3s, color 0.3s, border 0.3s;
+            box-sizing: border-box;
+        }
+        #notepad::placeholder {
+            color: #b0b8c9;
+            opacity: 1;
+        }
+        @media (max-width: 900px) {
+            .resize-flex {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 1.5rem;
+                max-width: 98vw;
+            }
+            .iframe-section, .notepad-section {
+                max-width: 100vw;
+                border-radius: 0.7rem;
+            }
+            .resizer {
+                display: none;
+            }
+        }
+        #onboarding-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        #onboarding-modal > div {
+            background: var(--panel);
+            color: var(--text);
+            padding: 2rem 2.5rem;
+            border-radius: 1rem;
+            max-width: 90vw;
+            max-height: 90vh;
+            box-shadow: 0 4px 32px #0008;
+            position: relative;
+        }
+        #onboarding-modal h2 {
+            margin-top: 0;
+        }
+        #onboarding-modal ul {
+            font-size: 1.1rem;
+            line-height: 1.7;
+        }
+        #close-onboarding {
+            margin-top: 1.5rem;
+            padding: 0.5rem 1.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--btn-bg);
+            color: var(--btn-text);
+            cursor: pointer;
+        }
+        #tour-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 3000;
+            align-items: center;
+            justify-content: center;
+        }
+        #tour-modal > div {
+            background: var(--panel);
+            color: var(--text);
+            padding: 2rem 2.5rem;
+            border-radius: 1rem;
+            max-width: 90vw;
+            max-height: 90vh;
+            box-shadow: 0 4px 32px #0008;
+            position: relative;
+            text-align: center;
+        }
+
+        /* Add this CSS for highlight effect */
+        .tour-highlight {
+            outline: 3px solid #ffe6b3 !important;
+            box-shadow: 0 0 0 6px #e6b86a55 !important;
+            z-index: 3001 !important;
+            position: relative;
+            transition: box-shadow 0.2s;
+        }
+
+        /* Card styles */
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 0.7rem;
+            padding: 1.2rem 1.5rem;
+            margin: 2rem auto 0 auto;
+            max-width: 480px;
+            min-width: 320px;
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .section-title {
+            font-weight: 600;
+            color: var(--header);
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .summary-section textarea,
+        .question-section input {
+            width: 100%;
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 0.7rem 0.8rem;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        .summary-section textarea {
+            min-height: 90px;
+            max-height: 220px;
+        }
+        .question-section input {
+            min-height: 2.5rem;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-title">Research Topic Explorer
+            <span class="info-tooltip" tabindex="0">
+                <svg width="18" height="18" fill="none" stroke="#6b7a99" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1"/></svg>
+                <span class="tooltip-text">
+                    <b>Tips:</b><br>
+                    - Notepad auto-saves<br>
+                    - <b>Ctrl+S</b>: Save<br>
+                    - <b>Ctrl+D</b>: Download<br>
+                    - <b>Ctrl+Shift+C</b>: Copy<br>
+                    - <b>Ctrl+Shift+X</b>: Clear<br>
+                    - Drag divider to resize panels<br>
+                    - Toggle light/dark mode<br>
+                    - Quick links below!
+                </span>
+            </span>
+        </div>
+        <div class="header-sub">AI-powered research tool for discovering ideas and gaps</div>
+    </header>
+    <div class="quick-links">
+        <a href="https://scholar.google.com/" target="_blank">Google Scholar</a>
+        <a href="https://arxiv.org/" target="_blank">arXiv</a>
+        <a href="https://www.semanticscholar.org/" target="_blank">Semantic Scholar</a>
+        <a href="https://www.ncbi.nlm.nih.gov/pubmed/" target="_blank">PubMed</a>
+        <a href="https://www.sciencedirect.com/" target="_blank">ScienceDirect</a>
+    </div>
+    <!-- Add below your quick-links -->
+    <div class="research-tools" style="text-align:center;margin-bottom:1.5rem;">
+        <label for="tools-dropdown" style="color:var(--header);font-weight:600;">Research Tools:</label>
+        <select id="tools-dropdown" style="margin-left:0.5rem;padding:0.3rem 0.7rem;border-radius:0.3rem;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+            <option value="">Select a tool…</option>
+            <option value="https://www.citethisforme.com/">Citation Generator</option>
+            <option value="https://www.grammarly.com/plagiarism-checker">Plagiarism Checker</option>
+            <option value="https://www.connectedpapers.com/">Connected Papers</option>
+            <option value="https://www.journalfinder.elsevier.com/">Journal Finder</option>
+            <option value="https://www.mendeley.com/">Reference Manager</option>
+        </select>
+    </div>
+    <script>
+    document.getElementById('tools-dropdown').addEventListener('change', function() {
+        if(this.value) window.open(this.value, '_blank');
+    });
+    </script>
+    <main class="main-content">
+        <div class="resize-flex" id="resize-flex">
+            <div class="iframe-section" id="iframe-container">
+                <div class="panel-header">
+                    <span>AI Research Tool</span>
+                    <button id="fullscreen-btn" title="Enlarge" class="fullscreen-icon-btn">
+                        <svg id="fullscreen-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#3b4a6b" stroke-width="2">
+                          <rect x="3" y="3" width="7" height="7" rx="2"/>
+                          <rect x="14" y="3" width="7" height="7" rx="2"/>
+                          <rect x="14" y="14" width="7" height="7" rx="2"/>
+                          <rect x="3" y="14" width="7" height="7" rx="2"/>
+                        </svg>
+                    </button>
+                </div>
+                <div style="margin-bottom:0.7rem;display:flex;gap:0.5rem;align-items:center;">
+                    <input id="iframe-url" type="text" value="http://127.0.0.1:7860" aria-label="Iframe URL" style="flex:1;min-width:120px;padding:0.3rem 0.6rem;border-radius:0.3rem;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+                    <button id="iframe-url-btn" aria-label="Load URL" style="padding:0.3rem 0.7rem;border-radius:0.3rem;border:1px solid var(--border);background:var(--btn-bg);color:var(--btn-text);cursor:pointer;">Load</button>
+                </div>
+                <iframe id="research-iframe" src="http://127.0.0.1:7860" allow="clipboard-write; clipboard-read"></iframe>
+            </div>
+            <div class="resizer" id="resizer"></div>
+            <div class="notepad-section">
+                <div class="notepad-header">
+                    📝 Notepad
+                    <div class="notepad-actions">
+                        <button id="copy-notes" title="Copy to clipboard">Copy</button>
+                        <button id="download-notes" title="Download as .txt">Download</button>
+                        <button id="clear-notes" title="Clear notepad">Clear</button>
+                    </div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;">
+                    <textarea id="notepad" placeholder="Jot down your research ideas, notes, or references here..." style="flex:1;min-height:180px;max-height:400px;resize:vertical;margin-bottom:0.5rem;"></textarea>
+                    <div id="autosave-status" style="font-size:0.9rem;color:var(--sub);margin-top:0.1rem;min-height:1.2em;">Saved</div>
+                </div>
+            </div>
+        </div>
+        <!-- Place below your notepad-section -->
+        <div class="summary-section card">
+            <div class="section-title">🗂️ Research Summary</div>
+            <textarea id="summary" placeholder="Summarize your research, findings, or next steps here..."></textarea>
+        </div>
+        <div class="question-section card">
+            <div class="section-title">❓ Research Question</div>
+            <input id="research-question" placeholder="What is your main research question?">
+        </div>
+    </main>
+    <button id="feedback-btn" aria-label="Send feedback" style="position:fixed;bottom:1.5rem;right:1.5rem;padding:0.7rem 1.2rem;border-radius:2rem;background:var(--btn-bg);color:var(--btn-text);border:1px solid var(--border);z-index:999;box-shadow:0 2px 8px #0002;cursor:pointer;">💬 Feedback</button>
+    <div id="onboarding-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center;">
+      <div style="background:var(--panel);color:var(--text);padding:2rem 2.5rem;border-radius:1rem;max-width:90vw;max-height:90vh;box-shadow:0 4px 32px #0008;position:relative;">
+        <h2 style="margin-top:0;">👋 Welcome to Research Topic Explorer!</h2>
+        <ul style="font-size:1.1rem;line-height:1.7;">
+          <li>📝 <b>Notepad</b> auto-saves and can be downloaded, copied, or cleared.</li>
+          <li>🔗 <b>Quick Links</b> to top research databases.</li>
+          <li>🌗 <b>Light/Dark/Reading/Contrast</b> modes for your comfort.</li>
+          <li>🖱️ <b>Resizable panels</b> – drag the divider.</li>
+          <li>⌨️ <b>Shortcuts:</b> Ctrl+S (Save), Ctrl+D (Download), Ctrl+Shift+C (Copy), Ctrl+Shift+X (Clear), Ctrl+P (Print)</li>
+          <li>🔄 <b>Custom iframe URL</b> – load any research tool you want.</li>
+          <li>💬 <b>Feedback</b> button for suggestions.</li>
+          <li>📶 <b>Offline mode</b> – notepad works even without internet.</li>
+        </ul>
+        <button id="close-onboarding" style="margin-top:1.5rem;padding:0.5rem 1.5rem;border-radius:0.5rem;border:1px solid var(--border);background:var(--btn-bg);color:var(--btn-text);cursor:pointer;">Got it!</button>
+      </div>
+    </div>
+    <div id="tour-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.7);z-index:3000;align-items:center;justify-content:center;">
+      <div id="tour-content" style="background:var(--panel);color:var(--text);padding:2rem 2.5rem;border-radius:1rem;max-width:90vw;max-height:90vh;box-shadow:0 4px 32px #0008;position:relative;text-align:center;">
+        <!-- Content will be injected by JS -->
+      </div>
+    </div>
+    <script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function(err) {
+      console.log('ServiceWorker registration failed: ', err);
+    });
+  });
+}
+</script>
+    <script>
+        // Fullscreen logic
+        const btn = document.getElementById('fullscreen-btn');
+        const container = document.getElementById('iframe-container');
+        const icon = document.getElementById('fullscreen-icon');
+        let isFullscreen = false;
+
+        btn.addEventListener('click', () => {
+            isFullscreen = !isFullscreen;
+            if(isFullscreen) {
+                container.classList.add('fullscreen-iframe');
+                btn.title = "Minimize";
+                icon.style.transform = "rotate(45deg)";
+                sessionStorage.setItem('iframe-fullscreen', '1');
+            } else {
+                container.classList.remove('fullscreen-iframe');
+                btn.title = "Enlarge";
+                icon.style.transform = "none";
+                sessionStorage.removeItem('iframe-fullscreen');
+            }
+        });
+
+        // Notepad features
+        const notepad = document.getElementById('notepad');
+        const copyBtn = document.getElementById('copy-notes');
+        const downloadBtn = document.getElementById('download-notes');
+        const clearBtn = document.getElementById('clear-notes');
+        const autosaveStatus = document.getElementById('autosave-status');
+        let autosaveTimeout;
+
+        // Auto-save/load notes
+        notepad.value = localStorage.getItem('research-notepad') || '';
+        notepad.addEventListener('input', () => {
+            localStorage.setItem('research-notepad', notepad.value);
+            autosaveStatus.textContent = "Saving...";
+            clearTimeout(autosaveTimeout);
+            autosaveTimeout = setTimeout(() => {
+                autosaveStatus.textContent = "Saved";
+            }, 600);
+        });
+
+        // Copy to clipboard
+        copyBtn.addEventListener('click', () => {
+            notepad.select();
+            document.execCommand('copy');
+            copyBtn.textContent = "Copied!";
+            setTimeout(() => copyBtn.textContent = "Copy", 1200);
+        });
+
+        // Download as .txt
+        downloadBtn.addEventListener('click', () => {
+            const blob = new Blob([notepad.value], {type: "text/plain"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "research-notes.txt";
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Clear notes
+        clearBtn.addEventListener('click', () => {
+            if(confirm("Clear all notes?")) {
+                notepad.value = "";
+                localStorage.removeItem('research-notepad');
+            }
+        });
+
+        // Print notes
+        const printBtn = document.getElementById('print-notes');
+        if (printBtn) {
+            printBtn.onclick = () => {
+                const win = window.open('', '', 'width=600,height=400');
+                win.document.write('<pre style="font-family:Inter,Arial,sans-serif;font-size:1rem;">' + notepad.value.replace(/</g, "&lt;") + '</pre>');
+                win.print();
+                win.close();
+            };
+        }
+
+        // Resizable panels
+        const resizer = document.getElementById('resizer');
+        const left = document.getElementById('iframe-container');
+        const right = document.querySelector('.notepad-section');
+        const flex = document.getElementById('resize-flex');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            document.body.style.cursor = 'ew-resize';
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            let totalWidth = flex.offsetWidth;
+            let leftWidth = e.clientX - flex.getBoundingClientRect().left;
+            let rightWidth = totalWidth - leftWidth - resizer.offsetWidth;
+            if(leftWidth < 250 || rightWidth < 180) return;
+            left.style.flex = 'none';
+            right.style.flex = 'none';
+            left.style.width = leftWidth + 'px';
+            right.style.width = rightWidth + 'px';
+        });
+        document.addEventListener('mouseup', function() {
+            isResizing = false;
+            document.body.style.cursor = '';
+        });
+
+        // Feedback button
+        document.getElementById('feedback-btn').onclick = () => {
+            window.open('mailto:your@email.com?subject=Research%20Website%20Feedback', '_blank');
+        };
+
+        // Onboarding modal
+        const onboardingModal = document.getElementById('onboarding-modal');
+        const closeOnboardingBtn = document.getElementById('close-onboarding');
+
+        // Show onboarding modal on first visit
+        if(!localStorage.getItem('onboarding-skipped')) {
+            onboardingModal.style.display = 'flex';
+        }
+
+        // Close onboarding modal
+        closeOnboardingBtn.addEventListener('click', () => {
+            onboardingModal.style.display = 'none';
+            localStorage.setItem('onboarding-skipped', '1');
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!localStorage.getItem('onboarding-shown')) {
+                document.getElementById('onboarding-modal').style.display = 'flex';
+            }
+            document.getElementById('close-onboarding').onclick = function() {
+                document.getElementById('onboarding-modal').style.display = 'none';
+                localStorage.setItem('onboarding-shown', '1');
+            };
+        });
+
+        // Tour modal logic
+        const tourModal = document.getElementById('tour-modal');
+        const tourContent = document.getElementById('tour-content');
+
+        function showTour() {
+            tourModal.style.display = 'flex';
+            tourContent.innerHTML = `
+                <h2 style="margin-top:0;">🌟 Feature Tour</h2>
+                <ol style="text-align:left;font-size:1rem;line-height:1.6;">
+                    <li><b>AI Research Tool:</b> Explore AI-generated research topics and papers.</li>
+                    <li><b>Notepad:</b> Save your notes, ideas, and references. Auto-save enabled.</li>
+                    <li><b>Quick Links:</b> Access top research databases with one click.</li>
+                    <li><b>Light/Dark Mode:</b> Toggle between light and dark themes for comfort.</li>
+                    <li><b>Resizable Panels:</b> Adjust the size of the research tool and notepad.</li>
+                    <li><b>Custom URL:</b> Load any research tool or website in the iframe.</li>
+                    <li><b>Shortcuts:</b> Use keyboard shortcuts for quick actions (e.g., Ctrl+S, Ctrl+D).</li>
+                    <li><b>Feedback:</b> Send us your feedback or suggestions easily.</li>
+                </ol>
+                <button id="close-tour" style="margin-top:1.5rem;padding:0.5rem 1.5rem;border-radius:0.5rem;border:1px solid var(--border);background:var(--btn-bg);color:var(--btn-text);cursor:pointer;">Got it, thanks!</button>
+            `;
+        }
+
+        // Close tour modal
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'close-tour' || e.target.id === 'tour-modal') {
+                tourModal.style.display = 'none';
+                localStorage.setItem('tour-skipped', '1');
+            }
+        });
+
+        // Show tour modal on first visit
+        if(!localStorage.getItem('tour-skipped')) {
+            setTimeout(showTour, 5000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+    if (!localStorage.getItem('tour-completed')) {
+        startTour();
+    }
+});
+
+function startTour() {
+    const steps = [
+        {
+            title: "👋 Welcome!",
+            text: "Welcome to Research Topic Explorer. Let's take a quick tour.",
+        },
+        {
+            title: "🔗 Quick Links",
+            text: "Use these links to access top research databases instantly.",
+            highlight: ".quick-links"
+        },
+        {
+            title: "🖥️ AI Research Tool",
+            text: "This panel lets you use AI-powered research tools. You can change the URL to load different tools.",
+            highlight: ".iframe-section"
+        },
+        {
+            title: "📝 Notepad",
+            text: "Jot down your research ideas, notes, or references here. Your notes are auto-saved and can be copied, downloaded, or cleared.",
+            highlight: ".notepad-section"
+        },
+        {
+            title: "↔️ Resizable Panels",
+            text: "Drag the divider between panels to resize them for your comfort.",
+            highlight: ".resizer"
+        },
+        {
+            title: "💬 Feedback",
+            text: "Click the feedback button to send us your suggestions or issues.",
+            highlight: "#feedback-btn"
+        },
+        {
+            title: "✅ All Set!",
+            text: "You're ready to start exploring. Enjoy your research journey!",
+        }
+    ];
+
+    let step = 0;
+    const modal = document.getElementById('tour-modal');
+    const content = document.getElementById('tour-content');
+
+    function showStep() {
+        // Remove highlight from previous
+        document.querySelectorAll('.tour-highlight').forEach(el => {
+            el.classList.remove('tour-highlight');
+        });
+
+        const s = steps[step];
+        let html = `<h2 style="margin-top:0;">${s.title}</h2><div style="margin:1.2rem 0 1.5rem 0;font-size:1.1rem;">${s.text}</div>`;
+        html += `<button id="tour-next" style="padding:0.5rem 1.5rem;border-radius:0.5rem;border:1px solid var(--border);background:var(--btn-bg);color:var(--btn-text);cursor:pointer;">${step === steps.length-1 ? "Finish" : "Next"}</button>`;
+        content.innerHTML = html;
+
+        // Default: center modal
+        modal.style.display = "flex";
+        content.style.position = "relative";
+        content.style.left = "";
+        content.style.top = "";
+        content.style.transform = "";
+
+        // Highlight section if needed and position tooltip
+        if (s.highlight) {
+            const el = document.querySelector(s.highlight);
+            if (el) {
+                el.classList.add('tour-highlight');
+                el.scrollIntoView({behavior: "smooth", block: "center"});
+                // Position the tour box near the highlighted element
+                const rect = el.getBoundingClientRect();
+                const modalRect = modal.getBoundingClientRect();
+                content.style.position = "absolute";
+                // Try to show to the right, else to the left, else below
+                let left = rect.right + 24;
+                let top = rect.top + window.scrollY;
+                if (left + content.offsetWidth > window.innerWidth) {
+                    left = rect.left - content.offsetWidth - 24;
+                }
+                if (left < 0) left = 24;
+                // If not enough vertical space, move below
+                if (top + content.offsetHeight > window.innerHeight + window.scrollY) {
+                    top = rect.bottom + window.scrollY + 24;
+                }
+                content.style.left = left + "px";
+                content.style.top = top + "px";
+                content.style.transform = "none";
+                modal.style.alignItems = "flex-start";
+                modal.style.justifyContent = "flex-start";
+            } else {
+                // fallback to center
+                content.style.position = "relative";
+                content.style.left = "";
+                content.style.top = "";
+                content.style.transform = "";
+                modal.style.alignItems = "center";
+                modal.style.justifyContent = "center";
+            }
+        } else {
+            // fallback to center
+            content.style.position = "relative";
+            content.style.left = "";
+            content.style.top = "";
+            content.style.transform = "";
+            modal.style.alignItems = "center";
+            modal.style.justifyContent = "center";
+        }
+
+    document.getElementById('tour-next').onclick = () => {
+        step++;
+        if (step < steps.length) {
+            showStep();
+        } else {
+            modal.style.display = "none";
+            document.querySelectorAll('.tour-highlight').forEach(el => {
+                el.classList.remove('tour-highlight');
+            });
+            localStorage.setItem('tour-completed', '1');
+        }
+    };
+}
+
+showStep();
+}
+    </script>
+</body>
+</html>
