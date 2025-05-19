@@ -2,17 +2,22 @@ import os
 import arxiv
 import requests
 import json
-import gradio as gr
 import google.generativeai as genai
-import base64
-import openai
-from flask import Flask, request, jsonify
+import time
+import shutil
+from textwrap import fill
+from PyPDF2 import PdfReader
+from io import BytesIO
+import argparse
+import re
+import datetime
+from collections import defaultdict
+
+from idea_generator import generate_new_ideas
 
 # --- API KEYS ---
-CORE_API_KEY = "fRP6JobTrnxWiFQZ9m8v7eOl3KMc21aX"
+CORE_API_KEY = os.getenv("CORE_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-STABILITY_API_KEY = os.getenv("STABILITY_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("Please set the GEMINI_API_KEY environment variable.")
 genai.configure(api_key=GEMINI_API_KEY)
@@ -27,7 +32,6 @@ generation_config = {
 }
 model = genai.GenerativeModel(model_name=model_name, generation_config=generation_config)
 
-# --- FETCH ARXIV ---
 def fetch_latest_arxiv_papers(query="all", max_results=10):
     try:
         search = arxiv.Search(
@@ -39,10 +43,9 @@ def fetch_latest_arxiv_papers(query="all", max_results=10):
         client = arxiv.Client()
         results = list(client.results(search))
         return results
-    except Exception as e:
+    except Exception:
         return []
 
-# --- FETCH CORE ---
 def fetch_latest_core_papers(query="all", max_results=10):
     base_url = "https://api.core.ac.uk/v3/search/works"
     headers = {
@@ -60,11 +63,383 @@ def fetch_latest_core_papers(query="all", max_results=10):
         response.raise_for_status()
         results = response.json()
         return results.get('data', [])
-    except Exception as e:
+    except Exception:
         return []
 
-# --- GAP ANALYSIS ---
-def identify_research_gaps_and_ideas(arxiv_papers, core_papers):
+def extract_text_from_pdf(url: str) -> str:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        with BytesIO(response.content) as pdf_file:
+            reader = PdfReader(pdf_file)
+            text = "\n".join([t for page in reader.pages if (t := page.extract_text())])
+        return text
+    except Exception as e:
+        print(f"Error extracting PDF text from {url}: {e}")
+        return ""
+
+def gemini_summarize(text):
+    prompt = f"Rewrite the following research paper abstract in a clear, concise, and readable way for a general audience:\n\n{text}"
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception:
+        return text
+
+def print_papers(arxiv_papers, core_papers):
+    term_width = shutil.get_terminal_size().columns if shutil.get_terminal_size().columns > 60 else 100
+    print("\n" + "="*term_width)
+    print("\033[1;36m{:^{w}}\033[0m".format("LATEST arXiv PAPERS", w=term_width))
+    print("="*term_width)
+    if arxiv_papers:
+        for i, paper in enumerate(arxiv_papers, 1):
+            print(f"\n{'-'*term_width}")
+            print(f"Paper {i}: {paper.title}")
+            print(f"{'-'*term_width}")
+            print(f"Authors: {', '.join([a.name for a in paper.authors])}")
+            print(f"Published: {paper.published.date()}")
+            readable_summary = gemini_summarize(paper.summary.strip())
+            print(f"\nSummary:\n{readable_summary}\n")
+            insight_prompt = (
+                f"Read the following research paper abstract and provide a one-sentence key insight or main idea for a general audience:\n\n"
+                f"{paper.summary.strip()}"
+            )
+            try:
+                insight_response = model.generate_content(insight_prompt)
+                key_insight = insight_response.text.strip()
+            except Exception:
+                key_insight = "N/A"
+            print(f"Key Insight: {key_insight}\n")
+            print(f"URL: {paper.entry_id}")
+    else:
+        print("No arXiv papers found.")
+
+    print("\n" + "="*term_width)
+    print("\033[1;36m{:^{w}}\033[0m".format("LATEST CORE PAPERS", w=term_width))
+    print("="*term_width)
+    if core_papers:
+        for i, paper in enumerate(core_papers, 1):
+            print(f"\n{'-'*term_width}")
+            print(f"Paper {i}: {paper.get('title', 'No Title')}")
+            print(f"{'-'*term_width}")
+            print(f"Authors: {', '.join(paper.get('authors', [])) if paper.get('authors') else 'Unknown'}")
+            print(f"Published: {paper.get('publishedDate', 'Unknown')}")
+            desc = paper.get('description', 'No Summary')
+            readable_summary = gemini_summarize(desc.strip())
+            print(f"\nSummary:\n{readable_summary}\n")
+            insight_prompt = (
+                f"Read the following research paper abstract and provide a one-sentence key insight or main idea for a general audience:\n\n"
+                f"{desc.strip()}"
+            )
+            try:
+                insight_response = model.generate_content(insight_prompt)
+                key_insight = insight_response.text.strip()
+            except Exception:
+                key_insight = "N/A"
+            print(f"Key Insight: {key_insight}\n")
+            print(f"URL: {paper.get('url', 'N/A')}")
+            if paper.get('downloadUrl'):
+                pdf_text = extract_text_from_pdf(paper['downloadUrl'])
+                if pdf_text:
+                    print(f"\n[PDF Extracted Text Preview]:\n{pdf_text[:500]}...\n")
+    else:
+        print("No CORE papers found.")
+
+# --- Trend and Novelty Detection ---
+def extract_keywords_and_years(arxiv_papers, core_papers):
+    keyword_years = defaultdict(list)
+    current_year = datetime.datetime.now().year
+
+    def tokenize(text):
+        return [w.lower() for w in re.findall(r'\b\w+\b', text) if len(w) > 3]
+
+    for paper in arxiv_papers:
+        year = paper.published.year if hasattr(paper, 'published') else current_year
+        tokens = tokenize(paper.title + " " + paper.summary)
+        for token in tokens:
+            keyword_years[token].append(year)
+
+    for paper in core_papers:
+        year = int(str(paper.get('publishedDate', str(current_year)))[:4])
+        desc = paper.get('description', '') or ''
+        tokens = tokenize(paper.get('title', '') + " " + desc)
+        for token in tokens:
+            keyword_years[token].append(year)
+
+    return keyword_years
+
+def detect_trends_and_novelty(keyword_years, recent_years=3, min_freq=3):
+    current_year = datetime.datetime.now().year
+    trending = []
+    established = []
+    novel = []
+
+    for keyword, years in keyword_years.items():
+        total = len(years)
+        recent = sum(1 for y in years if y >= current_year - recent_years + 1)
+        if total >= min_freq:
+            if recent / total > 0.6:
+                trending.append((keyword, total, recent))
+            else:
+                established.append((keyword, total, recent))
+        elif recent > 0:
+            novel.append((keyword, total, recent))
+
+    trending.sort(key=lambda x: -x[2])
+    established.sort(key=lambda x: -x[1])
+    novel.sort(key=lambda x: -x[2])
+
+    return trending, established, novel
+
+def print_trend_novelty(trending, established, novel):
+    print("\n=== Trending Keywords (recently popular) ===")
+    for k, total, recent in trending[:10]:
+        print(f"{k} (total: {total}, recent: {recent})")
+    print("\n=== Novel Keywords (rare, but recent) ===")
+    for k, total, recent in novel[:10]:
+        print(f"{k} (recent: {recent})")
+    print("\n=== Established Keywords (well-known) ===")
+    for k, total, recent in established[:10]:
+        print(f"{k} (total: {total})")
+
+def elaborate_idea(idea_text, topic, word_limit=1000):
+    prompt = (
+        f"You are an expert research assistant. Please elaborate in detail (up to {word_limit} words) on the following research idea related to '{topic}'. "
+        "Discuss its significance, possible methodology, expected challenges, and potential impact. Be thorough and insightful.\n\n"
+        f"Idea:\n{idea_text}"
+    )
+    try:
+        response = model.generate_content(prompt)
+        if hasattr(response, "text"):
+            return response.text
+        else:
+            return str(response)
+    except Exception as e:
+        return f"Error elaborating idea: {e}"
+
+def recommend_interdisciplinary_angles(idea_text, topic, num_suggestions=3):
+    prompt = (
+        f"You are an expert in interdisciplinary research. "
+        f"Given the following research idea related to '{topic}', "
+        f"suggest {num_suggestions} creative ways to approach this idea from different academic disciplines. "
+        "For each, specify the discipline, how it could contribute, and why this cross-disciplinary approach could be valuable. "
+        "Format your response as:\n"
+        "Suggestions\n"
+        "1. ...\n"
+        "2. ...\n"
+        "3. ...\n\n"
+        f"Idea:\n{idea_text}"
+    )
+    try:
+        response = model.generate_content(prompt)
+        if hasattr(response, "text"):
+            return response.text
+        else:
+            return str(response)
+    except Exception as e:
+        return f"Error generating interdisciplinary suggestions: {e}"
+
+def suggest_trending_topics(num_topics=5, field=None):
+    """
+    Use Gemini to suggest hot and trending research topics.
+    """
+    prompt = (
+        f"List {num_topics} hot and trending research topics"
+        + (f" in the field of {field}" if field else "")
+        + ". Format your response as a numbered list."
+    )
+    try:
+        response = model.generate_content(prompt)
+        if hasattr(response, "text"):
+            return response.text
+        else:
+            return str(response)
+    except Exception as e:
+        return f"Error getting trending topics: {e}"
+
+def parse_numbered_list(text):
+    import re
+    return [line.split('.', 1)[1].strip() for line in text.strip().split('\n') if re.match(r'^\d+\.', line)]
+
+def main():
+    parser = argparse.ArgumentParser(description='Research Gap Finder')
+    parser.add_argument('-t', '--topic', help='Research topic')
+    parser.add_argument('-n', '--num-papers', type=int, help='Number of papers')
+    parser.add_argument('-i', '--num-ideas', type=int, help='Number of ideas')
+    args = parser.parse_args()
+
+    print("=" * 50)
+    print("         RESEARCH GAP FINDER CLI")
+    print("=" * 50)
+
+    # --- NEW: Trending Topic Suggestion ---
+    if not args.topic:
+        want_trending = input("Would you like to see hot and trending research topics? (y/n): ").strip().lower()
+        if want_trending == 'y':
+            field = input("Enter a field/area (or press Enter for general topics): ").strip()
+            trending_topics = suggest_trending_topics(num_topics=5, field=field if field else None)
+            print("\nHere are some hot and trending research topics:\n")
+            print(trending_topics)
+            topics_list = parse_numbered_list(trending_topics)
+            if topics_list:
+                print("\nEnter the number of a topic to select it, or press Enter to write your own.")
+                choice = input("Your choice: ").strip()
+                if choice.isdigit() and 1 <= int(choice) <= len(topics_list):
+                    topic = topics_list[int(choice)-1]
+                    print(f"Selected topic: {topic}")
+                else:
+                    topic = input("Enter your research topic: ")
+            else:
+                topic = input("Enter your research topic: ")
+        else:
+            topic = input("\nEnter your research topic: ")
+    else:
+        topic = args.topic
+
+    try:
+        num_papers = args.num_papers if args.num_papers else int(input("How many papers do you want to see from each source? (max 10): "))
+        if num_papers < 1 or num_papers > 10:
+            print("Number out of range. Showing 10 papers from each source.")
+            num_papers = 10
+    except ValueError:
+        print("Invalid input. Showing 10 papers from each source.")
+        num_papers = 10
+
+    print("\nFetching papers and analyzing gaps, please wait...\n")
+    start_time = time.time()
+    arxiv_papers = fetch_latest_arxiv_papers(query=topic, max_results=num_papers)
+    core_papers = fetch_latest_core_papers(query=topic, max_results=num_papers)
+    print(f"arXiv papers: {len(arxiv_papers)}, CORE papers: {len(core_papers)}")
+    elapsed = time.time() - start_time
+    print(f"Done in {elapsed:.2f} seconds.\n")
+
+    # --- Trend and Novelty Detection ---
+    keyword_years = extract_keywords_and_years(arxiv_papers, core_papers)
+    trending, established, novel = detect_trends_and_novelty(keyword_years)
+    print_trend_novelty(trending, established, novel)
+
+    print("=" * 50)
+    print("                LATEST PAPERS")
+    print("=" * 50)
+    print_papers(arxiv_papers, core_papers)
+    if not arxiv_papers and not core_papers:
+        print("Could not fetch papers for the given topic from either source.")
+        return
+
+    try:
+        num_ideas = args.num_ideas if args.num_ideas else int(input("\nHow many new research ideas/gaps do you want to see? (max 10): "))
+        if num_ideas < 1 or num_ideas > 10:
+            print("Number out of range. Showing 10 ideas.")
+            num_ideas = 10
+    except ValueError:
+        print("Invalid input. Showing 10 ideas.")
+        num_ideas = 10
+
+    # Generate gaps/ideas
+    gaps = identify_research_gaps_and_ideas(arxiv_papers, core_papers, topic=topic)
+    suggestion_list = []
+    if isinstance(gaps, str):
+        suggestion_list = print_gaps_and_ideas(gaps, num_ideas)
+    else:
+        print("\n" + "="*60)
+        print("\033[1;36m{:^60}\033[0m".format("RESEARCH GAPS AND NEW IDEAS"))
+        print("="*60 + "\n")
+        print(gaps)
+        print("\n" + "="*60 + "\n")
+
+    # Let user select idea by number
+    if suggestion_list:
+        print("Enter the number of a research idea to generate an article (e.g., 1),")
+        print("or press Enter to use the first idea.")
+        idea_input = input("Your choice: ").strip()
+        if not idea_input:
+            idea = suggestion_list[0]
+            print(f"\nUsing suggested idea: {idea}\n")
+        else:
+            try:
+                idx = int(idea_input) - 1
+                if idx < 0 or idx >= len(suggestion_list):
+                    print("Invalid number. Using the first idea.")
+                    idea = suggestion_list[0]
+                else:
+                    idea = suggestion_list[idx]
+                print(f"\nUsing suggested idea: {idea}\n")
+            except ValueError:
+                print("Invalid input. Using the first idea.")
+                idea = suggestion_list[0]
+    else:
+        print("No ideas found to suggest.")
+        return
+
+    # Step 3: Generate article
+    try:
+        max_chars = int(input("Enter the maximum number of characters for the article (max 10000): "))
+        if max_chars < 500:
+            print("Number too low. Setting to 500 characters.")
+            max_chars = 500
+        elif max_chars > 10000:
+            print("Number too high. Limiting to 10000 characters.")
+            max_chars = 10000
+    except ValueError:
+        print("Invalid input. Limiting to 10000 characters.")
+        max_chars = 10000
+
+    print("\n" + "="*50)
+    print("             GENERATED ARTICLE")
+    print("="*50 + "\n")
+    article = write_research_article(idea, max_chars=max_chars)
+    print_article(article)
+    print("\n" + "="*50 + "\n")
+
+    # Interdisciplinary angle for main idea
+    inter_angle = input("Would you like interdisciplinary angle suggestions for this idea? (y/n): ").strip().lower()
+    if inter_angle == 'y':
+        inter_suggestions = recommend_interdisciplinary_angles(idea, topic, num_suggestions=3)
+        print("\nInterdisciplinary Angle Suggestions:\n")
+        print(inter_suggestions)
+
+    # Step 4: Offer to generate more ideas and elaborate
+    while True:
+        see_more = input("Would you like to see more research ideas generated by Gemini? (y/n): ").strip().lower()
+        if see_more == 'y':
+            limitations_text = input(
+                "Enter any specific limitations or gaps to focus on for new ideas\n"
+                "(or just press Enter to get general research ideas): "
+            ).strip()
+            if not limitations_text:
+                limitations_text = "General research gaps in the topic."
+            more_ideas = generate_new_ideas(limitations_text, topic, num_ideas=5, word_limit=250)
+            print("\nAdditional Research Ideas:\n")
+            print(more_ideas)
+
+            # Offer to elaborate on any idea
+            elaborate = input("Would you like to elaborate on any of these ideas? (y/n): ").strip().lower()
+            if elaborate == 'y':
+                ideas_list = re.split(r'\n\s*\d+[\.\)]\s*', more_ideas)
+                ideas_list = [idea.strip() for idea in ideas_list if idea.strip()]
+                for idx, idea in enumerate(ideas_list, 1):
+                    print(f"{idx}. {idea[:80]}{'...' if len(idea) > 80 else ''}")
+                try:
+                    idea_no = int(input(f"Enter the idea number (1-{len(ideas_list)}): "))
+                    if 1 <= idea_no <= len(ideas_list):
+                        selected_idea = ideas_list[idea_no-1]
+                        detail = elaborate_idea(selected_idea, topic, word_limit=1000)
+                        print(f"\nDetailed Elaboration for Idea {idea_no}:\n")
+                        print(detail)
+                        # Interdisciplinary angle for elaborated idea
+                        inter_angle = input("Would you like interdisciplinary angle suggestions for this idea? (y/n): ").strip().lower()
+                        if inter_angle == 'y':
+                            inter_suggestions = recommend_interdisciplinary_angles(selected_idea, topic, num_suggestions=3)
+                            print("\nInterdisciplinary Angle Suggestions:\n")
+                            print(inter_suggestions)
+                    else:
+                        print("Invalid idea number. Skipping elaboration.")
+                except ValueError:
+                    print("Invalid input. Skipping elaboration.")
+        else:
+            break
+
+def identify_research_gaps_and_ideas(arxiv_papers, core_papers, topic=None):
     all_papers_info = []
     for paper in arxiv_papers:
         all_papers_info.append({
@@ -76,22 +451,51 @@ def identify_research_gaps_and_ideas(arxiv_papers, core_papers):
             "title": paper.get('title', 'No Title'),
             "summary": paper.get('description', 'No Summary')
         })
-    if not all_papers_info:
-        return "No papers found from either source or an error occurred during fetching."
-    paper_summaries = ""
-    for paper in all_papers_info:
-        paper_summaries += f"Title: {paper['title']}\nSummary: {paper['summary']}\n\n"
-    prompt = f"""
+
+    if not all_papers_info and topic:
+        prompt = f"""
+No research papers were found for the topic "{topic}".
+Based on your knowledge, generate a list of at least 2 potential research gaps and 2 new research ideas for this topic.
+Format your response exactly like this:
+
+Potential research gaps:
+1. Gap one...
+2. Gap two...
+
+New research ideas:
+1. Idea one...
+2. Idea two...
+"""
+    else:
+        paper_summaries = ""
+        word_count = 0
+        for paper in all_papers_info:
+            summary_words = paper['summary'].split()
+            if word_count + len(summary_words) > 500:
+                summary_words = summary_words[:500 - word_count]
+            paper_summaries += f"Title: {paper['title']}\nSummary: {' '.join(summary_words)}\n\n"
+            word_count += len(summary_words)
+            if word_count >= 500:
+                break
+        prompt = f"""
 Analyze the following research paper summaries on a similar topic from multiple sources (arXiv and CORE). Your goal is to identify potential research gaps and propose new, creative research ideas based on these gaps. Do not extract limitations mentioned within the papers. Focus on identifying areas that are not fully explored or where further work is needed based on the synthesis of the provided summaries.
 
-Research Paper Summaries:
+Research Paper Summaries (max 500 words total):
 {paper_summaries}
 
 Based on these summaries, identify:
 1.  Potential research gaps (areas that seem under-researched or could be expanded upon).
 2.  New research ideas that address these gaps.
 
-Present your findings clearly.
+Format your response exactly like this:
+
+Potential research gaps:
+1. Gap one...
+2. Gap two...
+
+New research ideas:
+1. Idea one...
+2. Idea two...
 """
     try:
         response = model.generate_content(prompt)
@@ -99,7 +503,9 @@ Present your findings clearly.
     except Exception as e:
         return f"Error communicating with Gemini API: {e}"
 
-def write_research_article(research_gap_idea):
+def write_research_article(research_gap_idea, max_chars=10000):
+    if max_chars > 10000:
+        max_chars = 10000
     prompt = f"""
 Given the following research gap or idea:
 {research_gap_idea}
@@ -114,129 +520,61 @@ A concise conclusion
 
 Use clear, academic language and cite hypothetical references in APA style if needed (e.g., (Author, Year)).
 Format the output clearly with sections.
+Limit the article to approximately {max_chars} characters.
 """
     try:
         response = model.generate_content(prompt)
-        return response.text
+        return response.text[:max_chars]
     except Exception as e:
         return f"Error communicating with Gemini API: {e}"
 
-def generate_illustration_description(research_gap_idea):
-    prompt = f"""
-Given the following research gap or idea:
-{research_gap_idea}
-
-Describe an academic-style illustration that could visually represent this research idea. The description should be suitable for input to an AI image generation model (such as DALL-E or Stable Diffusion) and clearly depict the core concept in a way appropriate for a scientific article. Focus on key visual elements, style (e.g., scientific diagram, conceptual illustration), and the overall message.
-
-Example: "A neural network diagram overlaid with data points representing patient health metrics, illustrating the application of AI in personalized medicine."
-
-Write only the description for the AI image generation model.
-"""
+def print_gaps_and_ideas(gaps, num_ideas=10):
     try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Error communicating with Gemini API for illustration description: {e}"
+        term_width = shutil.get_terminal_size().columns
+        if term_width < 60:
+            term_width = 60
+    except Exception:
+        term_width = 100
 
-def generate_image_from_description(description):
-    try:
-        response = openai.Image.create(
-            prompt=description,
-            n=1,
-            size="512x512",
-            api_key=OPENAI_API_KEY
-        )
-        image_url = response['data'][0]['url']
-        return image_url  # Return the URL for Gradio to display
-    except Exception as e:
-        print("DALL·E error:", e)
-        return None
+    lines = gaps.strip().split('\n')
+    gap_list = []
+    idea_list = []
+    section = None
+    for line in lines:
+        l = line.strip()
+        if l.lower().startswith("potential research gaps"):
+            section = "gap"
+            continue
+        elif l.lower().startswith("new research ideas"):
+            section = "idea"
+            continue
+        elif l == "" or l.startswith("="):
+            continue
+        elif section == "gap" and (l[0].isdigit() or l[0] in "IVXLCDM"):
+            gap_list.append(l.lstrip("1234567890.IVXLCDM ").strip())
+        elif section == "idea" and (l[0].isdigit() or l[0] in "IVXLCDM"):
+            idea_list.append(l.lstrip("1234567890.IVXLCDM ").strip())
 
-# Add this function before your Gradio Blocks section
-def generate_and_show_image(idea):
-    description = generate_illustration_description(idea)
-    image_path = generate_image_from_description(description)
-    return description, image_path
+    print("\nPotential research gaps:")
+    for idx, gap in enumerate(gap_list[:num_ideas], 1):
+        print(f"{idx}. {gap}")
+    print("\nNew research ideas:")
+    for idx, idea in enumerate(idea_list[:num_ideas], 1):
+        print(f"{idx}. {idea}")
+    print()
+    return idea_list
 
-# --- GRADIO APP (Two-step workflow) ---
-with gr.Blocks() as demo:
-    gr.Markdown("# Research Gap Finder and Article Generator")
-    gr.Markdown("**Step 1:** Enter a research topic to find research gaps and new ideas.")
-    topic = gr.Textbox(label="Enter a research topic")
-    gap_output = gr.Textbox(label="Research Gaps and New Ideas", lines=15)
-    find_gaps_btn = gr.Button("Find Gaps and Ideas")
-
-    gr.Markdown("**Step 2:** Enter or paste a research gap/idea from above to generate a research article or illustration description.")
-    idea_input = gr.Textbox(label="Enter a research gap or idea")
-    with gr.Row():
-        article_btn = gr.Button("Generate Article")
-        illustration_btn = gr.Button("Generate Illustration Description")
-    article_output = gr.Textbox(label="Generated Article", lines=25)
-    illustration_output = gr.Textbox(label="Illustration Description", lines=8)
-    
-    # New: Button and input for generating image from description
-    gr.Markdown("**Step 3:** (Optional) Edit the illustration description if needed, then generate the image.")
-    image_desc_input = gr.Textbox(label="Illustration Description for Image Generation", lines=8)
-    generate_image_btn = gr.Button("Generate Image from Description")
-    image_output = gr.Image(label="Generated Image")
-    download_output = gr.File(label="Download Image")  # Add this line
-
-    # Step 1: Find gaps and ideas
-    def step1_find_gaps(topic):
-        arxiv_papers = fetch_latest_arxiv_papers(query=topic, max_results=10)
-        core_papers = fetch_latest_core_papers(query=topic, max_results=10)
-        if not arxiv_papers and not core_papers:
-            return "Could not fetch papers for the given topic from either source."
-        return identify_research_gaps_and_ideas(arxiv_papers, core_papers)
-
-    find_gaps_btn.click(step1_find_gaps, inputs=topic, outputs=gap_output)
-
-    # Step 2: Generate article
-    article_btn.click(write_research_article, inputs=idea_input, outputs=article_output)
-    illustration_btn.click(
-        generate_illustration_description,
-        inputs=idea_input,
-        outputs=illustration_output
-    )
-
-    # When user clicks "Generate Illustration Description", also fill the image_desc_input box
-    illustration_btn.click(
-        generate_illustration_description,
-        inputs=idea_input,
-        outputs=image_desc_input
-    )
-
-    # Step 3: Generate image from description
-    def generate_image_and_file(description):
-        image_path = generate_image_from_description(description)
-        return image_path, image_path  # Return for both image and file
-
-    generate_image_btn.click(
-        generate_image_and_file,
-        inputs=image_desc_input,
-        outputs=[image_output, download_output]
-    )
-
-app = Flask(__name__)
-
-@app.route("/api/gap", methods=["POST"])
-def find_gap():
-    data = request.json
-    topic = data["topic"]
-    arxiv_papers = fetch_latest_arxiv_papers(query=topic, max_results=10)
-    core_papers = fetch_latest_core_papers(query=topic, max_results=10)
-    if not arxiv_papers and not core_papers:
-        return jsonify({"error": "Could not fetch papers for the given topic from either source."}), 400
-    gaps = identify_research_gaps_and_ideas(arxiv_papers, core_papers)
-    return jsonify({"result": gaps})
-
-@app.route("/api/article", methods=["POST"])
-def write_article():
-    data = request.json
-    idea = data["idea"]
-    article = write_research_article(idea)
-    return jsonify({"result": article})
+def print_article(article_text):
+    term_width = shutil.get_terminal_size().columns if shutil.get_terminal_size().columns > 60 else 100
+    paragraphs = article_text.strip().split('\n')
+    print("\n" + "="*term_width)
+    print("\033[1;33m{:^{w}}\033[0m".format("GENERATED ARTICLE", w=term_width))
+    print("="*term_width + "\n")
+    for para in paragraphs:
+        if para.strip():
+            print("\033[0;37m" + para.strip() + "\033[0m\n")
+    print("\n" + "="*term_width + "\n")
 
 if __name__ == "__main__":
-    demo.launch(debug=True)
-    app.run(host="0.0.0.0", port=7860)
+    main()
+
