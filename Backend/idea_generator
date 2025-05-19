@@ -1,0 +1,19 @@
+import google.generativeai as genai
+
+def generate_new_ideas(limitations_text, topic, num_ideas=5, word_limit=250):
+    prompt = (
+        f"You are an expert research assistant. Based on the following limitations and scope found in recent research papers about '{topic}', "
+        f"suggest {num_ideas} innovative research ideas or directions that address these gaps. "
+        f"For each idea, elaborate thoroughly in a separate paragraph, ensuring each idea is explained in more than 100 words and within {word_limit} words. "
+        "Number each idea and do not combine them. Be specific, detailed, and concise. List them as numbered points.\n\n"
+        f"Limitations and Scope:\n{limitations_text}"
+    )
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        if hasattr(response, "text"):
+            return response.text
+        else:
+            return str(response)
+    except Exception as e:
+        return f"Error generating new ideas: {e}"
