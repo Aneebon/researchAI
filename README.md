@@ -72,4 +72,3 @@ The Research Gap Finder & Idea Generator combines:
 
 🖥️ A user-friendly interface
 
-to help you discover what's missing in the literature—and turn it into your next big idea.
