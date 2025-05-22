@@ -52,6 +52,7 @@ A powerful AI-powered tool that helps you find research gaps and generate fresh 
 | 🗺️ Visualization                      | Topic clusters, citation graphs via VOSviewer, Connected Papers |
 | 🖥️ Gradio UI                          | Simple, interactive web-based user interface                    |
 | 🔗 Utilities (Requests, PyMuPDF, tqdm) | For data fetching, PDF parsing, and user feedback               |
+
 🏆 Key Benefits
 ⚡ Faster Literature Reviews – Automates gap identification
 
